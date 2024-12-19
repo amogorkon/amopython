@@ -79,7 +79,7 @@ _PyPegen_parse(Parser *p)
 # ~
 #   Commit to the current alternative, even if it fails to parse.
 # &&e
-#   Eager parse e. The parser will not backtrack and will immediately 
+#   Eager parse e. The parser will not backtrack and will immediately
 #   fail with SyntaxError if e cannot be parsed.
 #
 
@@ -383,10 +383,24 @@ while_stmt[stmt_ty]:
 
 for_stmt[stmt_ty]:
     | invalid_for_stmt
-    | 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
-        _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
-        CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+    | 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=disjunction { z })+] ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
+        _PyAST_For(
+            t, ex,
+            ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                p,
+                _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                b, NULL, EXTRA))) : b,
+            el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
+    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=disjunction { z })+] ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
+        CHECK_VERSION(
+            stmt_ty, 5, "Async for loops are",
+            _PyAST_AsyncFor(
+                t, ex,
+                ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                    p,
+                    _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                    b, NULL, EXTRA))) : b,
+                el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
     | invalid_for_target
 
 # With statement
@@ -640,7 +654,7 @@ type_alias[stmt_ty]:
 # Type parameter declaration
 # --------------------------
 
-type_params[asdl_type_param_seq*]: 
+type_params[asdl_type_param_seq*]:
     | invalid_type_params
     | '[' t=type_param_seq ']' {
         CHECK_VERSION(asdl_type_param_seq *, 12, "Type parameter lists are", t) }
@@ -1313,13 +1327,13 @@ invalid_group:
 invalid_import:
     | a='import' ','.dotted_name+ 'from' dotted_name {
         RAISE_SYNTAX_ERROR_STARTING_FROM(a, "Did you mean to use 'from ... import ...' instead?") }
-    | 'import' token=NEWLINE { 
+    | 'import' token=NEWLINE {
         RAISE_SYNTAX_ERROR_STARTING_FROM(token, "Expected one or more names after 'import'") }
 
 invalid_import_from_targets:
     | import_from_as_names ',' NEWLINE {
         RAISE_SYNTAX_ERROR("trailing comma not allowed without surrounding parentheses") }
-    | token=NEWLINE { 
+    | token=NEWLINE {
         RAISE_SYNTAX_ERROR_STARTING_FROM(token, "Expected one or more names after 'import'") }
 
 invalid_with_stmt:
@@ -1457,5 +1471,5 @@ invalid_factor:
 invalid_type_params:
     | '[' token=']' {
         RAISE_SYNTAX_ERROR_STARTING_FROM(
-            token, 
+            token,
             "Type parameter list cannot be empty")}
